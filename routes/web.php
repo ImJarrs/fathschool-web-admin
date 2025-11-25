@@ -161,6 +161,7 @@ Route::get('/users/by-role', [UserController::class, 'getUsersByRole'])->name('u
 
 
 
+include base_path('routes/api.php');
 include base_path('routes/auth.php');
 include base_path('routes/payment.php');
 include base_path('routes/website.php');

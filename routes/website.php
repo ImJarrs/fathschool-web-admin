@@ -239,7 +239,7 @@ Route::middleware(['auth:sanctum', config('jetstream.auth_session'), 'verified']
             Route::get('/all/student/fees', 'allStudentFees')->name('report.all.student.fees');
             Route::get('/get-courses', [ReportController::class, 'getCourses'])->name('get.courses');
             Route::get('/get-subjects', [ReportController::class, 'getSubjects'])->name('get.subjects');
-            Route::get('studentt/attendance', [ReportController::class, 'attendance'])->name('student.attendance');
+            Route::get('student/attendance', [ReportController::class, 'attendance'])->name('student.attendance');
 
             // Report Export as pdf or excel
             Route::post('/transaction/export', 'transactionExport')->name('report.transaction.export');
