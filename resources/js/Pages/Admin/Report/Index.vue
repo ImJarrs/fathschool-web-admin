@@ -137,6 +137,31 @@
                             </div>
                         </li>
 
+                        <li class="flow-root" v-if="can('report.transaction')">
+                            <div
+                                class="relative -m-2 flex items-center gap-4 rounded-xl p-2 transition-all duration-300 focus-within:ring-2 focus-within:ring-indigo-500 hover:bg-gray-200 dark:hover:bg-gray-500">
+                                <div class="flex-shrink-0 flex items-center justify-center h-16 w-16 rounded-lg bg-indigo-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 text-white">
+                                    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+                                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+                                    <line x1="9" y1="12" x2="15" y2="12"/>
+                                    <line x1="9" y1="16" x2="15" y2="16"/>
+                                </svg>
+                                </div>
+                                <div>
+                                <h3 class="text-sm font-medium text-gray-900">
+                                <Link :href="route('report.administration')" class="focus:outline-none">
+                                    <span class="absolute inset-0" aria-hidden="true"></span>
+                                    <span>
+                                            {{ __('Administration') }}
+                                    </span>
+                                    <span aria-hidden="true"> &rarr;</span>
+                                    </Link>
+                                </h3>
+                                </div>
+                            </div>
+                        </li>
+
                         <li class="flow-root"  v-if="can('report.other')">
                             <div
                                 class="relative -m-2 flex items-center gap-4 rounded-xl p-2 transition-all duration-300 focus-within:ring-2 focus-within:ring-indigo-500 hover:bg-gray-200 dark:hover:bg-gray-500">

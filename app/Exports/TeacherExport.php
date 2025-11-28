@@ -40,7 +40,7 @@ class TeacherExport implements FromCollection, WithHeadings, WithMapping, WithSt
             return collect([]);
         }
 
-        $dates = collect($start->daysUntil($end))->map(fn($d) => $d->toDateString());
+        $dates = collect(iterator_to_array($start->daysUntil($end)))->map(fn($d) => Carbon::parse((string)$d)->toDateString());
 
         $teachersQuery = User::where('role', 'teacher')->with(['department.study_program', 'leaves']);
 
@@ -65,8 +65,8 @@ class TeacherExport implements FromCollection, WithHeadings, WithMapping, WithSt
 
             $leaveDates = collect();
             foreach ($teacher->leaves as $leave) {
-                $period = collect(Carbon::parse($leave->start)->daysUntil($leave->end))
-                    ->map(fn($d) => $d->toDateString());
+                $period = collect(iterator_to_array(Carbon::parse($leave->start)->daysUntil($leave->end)))
+                    ->map(fn($d) => Carbon::parse((string)$d)->toDateString());
                 $leaveDates = $leaveDates->merge($period);
             }
 
@@ -113,7 +113,9 @@ class TeacherExport implements FromCollection, WithHeadings, WithMapping, WithSt
     {
         $start = Carbon::parse($this->start_date);
         $end = Carbon::parse($this->end_date);
-        $dates = collect($start->daysUntil($end))->map(fn($date) => $date->format('d/m/Y'))->toArray();
+        $dates = collect(iterator_to_array($start->daysUntil($end)))
+            ->map(fn($d) => Carbon::parse((string)$d)->format('d/m/Y'))
+            ->toArray();
 
         return array_merge(
             ['No', 'Nama Guru', 'Program Studi'],

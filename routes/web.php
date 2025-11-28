@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\Auth;
 use msztorc\LaravelEnv\Env;
 
 Route::get('/test', function () {
@@ -126,9 +127,8 @@ Route::middleware([
     Route::resource('comment', CommentController::class);
     Route::get('notice-board-detail/{notice:slug}', [AuthDashboardController::class, 'noticeBoardDetails'])->name('notice.board.details');
     Route::get('student/assignment/details/{assignment}', [AuthDashboardController::class, 'assignmentDetails'])->name('assignment.detail');
-
     Route::post('/read/notification', function () {
-        auth()->user()->unreadNotifications->markAsRead();
+        Auth::user()->unreadNotifications->markAsRead();
 
         return back();
     })->name('read.notification');

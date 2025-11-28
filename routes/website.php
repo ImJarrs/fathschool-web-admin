@@ -232,6 +232,8 @@ Route::middleware(['auth:sanctum', config('jetstream.auth_session'), 'verified']
             Route::get('/attendance', 'attendance')->name('report.attendance');
             Route::get('/others', 'others')->name('report.others');
             Route::get('/students', 'students')->name('report.student');
+            Route::get('/administration', 'administrations')->name('report.administration');
+            Route::post('/administration/export', 'administrationExport')->name('report.administration.export');
             Route::get('/students/enroll', 'studentsEnroll')->name('report.student.enroll');
             Route::get('/student/fee', 'studentFees')->name('report.student.fees');
             Route::get('/subject/attendance', 'subjectAttendance')->name('report.subject.attendance');

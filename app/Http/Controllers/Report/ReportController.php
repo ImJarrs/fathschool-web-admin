@@ -26,6 +26,7 @@ use App\Models\User;
 use App\Models\UserCourse;
 use App\Models\UserProfile;
 use Barryvdh\DomPDF\Facade\Pdf;
+use App\Exports\AdministrationAttendanceExport;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
@@ -725,6 +726,120 @@ class ReportController extends Controller
     }
 
     /**
+     * Display a listing of the administration (TU) report.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function administrations(Request $request)
+    {
+        abort_if(! userCan('report.attendance'), 403);
+
+        $departments = \App\Models\Department::get(['id', 'name', 'slug']);
+        $admin_query = User::query()->active()->administration();
+
+        // filter => keyword
+        if ($request->has('keyword') && $request->keyword != null) {
+            $admin_query->where('name', 'Like', '%' . $request->keyword . '%')
+                ->orWhere('email', 'Like', '%' . $request->keyword . '%');
+        }
+
+        // filter => department
+        if ($request->has('department') && $request->department != null && $request->department != 'all') {
+            $admin_query->whereHas('department', function ($q) use ($request) {
+                $q->where('slug', $request->department);
+            });
+        }
+
+        $administrations = $admin_query->latest()->with('department')->paginate(15)->onEachSide(-1);
+
+        // attendance data for the period
+        $start_date = $request->input('start_date') ?? Carbon::now()->startOfMonth()->toDateString();
+        $end_date = $request->input('end_date') ?? Carbon::now()->endOfMonth()->toDateString();
+
+        try {
+            $start_date = Carbon::parse($start_date)->toDateString();
+            $end_date = Carbon::parse($end_date)->toDateString();
+        } catch (\Exception $e) {
+            $start_date = Carbon::now()->startOfMonth()->toDateString();
+            $end_date = Carbon::now()->endOfMonth()->toDateString();
+        }
+
+        $dates = collect(Carbon::parse($start_date)->daysUntil($end_date))
+            ->filter(function ($date) {
+                $dayName = Carbon::parse($date)->format('l');
+                return !in_array($dayName, ['Saturday', 'Sunday']);
+            })
+            ->map(fn($date) => $date->toDateString())
+            ->values();
+
+        $admins = $admin_query->get();
+
+        $attendances = Attendance::whereBetween('date', [$start_date, $end_date])
+            ->get()
+            ->groupBy('user_id');
+
+        $administrationsAttendance = $admins->map(function ($admin) use ($dates, $attendances) {
+            $userAttendances = $attendances->get($admin->id, collect());
+
+            $totalIjin = $admin->leaves->filter(function ($leave) use ($dates) {
+                return $leave->start <= $dates->last() && $leave->end >= $dates->first();
+            })->sum(function ($leave) {
+                return Carbon::parse($leave->start)->diffInDays(Carbon::parse($leave->end)) + 1;
+            });
+
+            $leaveDates = collect();
+            foreach ($admin->leaves as $leave) {
+                $leavePeriod = collect(Carbon::parse($leave->start)->daysUntil($leave->end))->map(fn($date) => $date->toDateString());
+                $leaveDates = $leaveDates->merge($leavePeriod);
+            }
+
+            $attendanceStatus = $dates->mapWithKeys(function ($date) use ($userAttendances, $leaveDates) {
+                $dayName = Carbon::parse($date)->format('l');
+                if (in_array($dayName, ['Saturday', 'Sunday'])) {
+                    return []; // skip
+                }
+                if ($leaveDates->contains($date)) {
+                    return [$date => 'I'];
+                }
+                $attendance = $userAttendances->firstWhere('date', $date);
+                return [$date => $attendance ? 'H' : 'A'];
+            });
+
+            $totalHadir = $attendanceStatus->filter(fn($status) => $status === 'H')->count();
+            $totalAlfa = $attendanceStatus->filter(fn($status) => $status === 'A')->count();
+
+            return [
+                'id' => $admin->id,
+                'user_name' => $admin->name,
+                'department' => $admin->department->name ?? '-',
+                'attendance' => $attendanceStatus,
+                'summary' => [
+                    'hadir' => $totalHadir,
+                    'sakit' => 0,
+                    'ijin' => $totalIjin,
+                    'alfa' => $totalAlfa,
+                ],
+            ];
+        });
+
+        $total = [
+            'hadir' => $administrationsAttendance->sum(fn($s) => $s['summary']['hadir']),
+            'sakit' => 0,
+            'ijin' => $administrationsAttendance->sum(fn($s) => $s['summary']['ijin']),
+            'alfa' => $administrationsAttendance->sum(fn($s) => $s['summary']['alfa']),
+        ];
+
+        return inertia('Admin/Report/Administration', [
+            'filter_data' => $request,
+            'administrations' => $administrations,
+            'administrationsAttendance' => $administrationsAttendance,
+            'dates' => $dates,
+            'total' => $total,
+            'departments' => $departments,
+        ]);
+    }
+
+    /**
      * Export report as pdf or excel.
      *
      * @return \Illuminate\Http\Response
@@ -834,6 +949,79 @@ class ReportController extends Controller
             // Stream the PDF to the user's browser for download with a descriptive filename
             return $pdf->stream($student->name . "'s_attendance_report " . $monthName . '-' . $year . '.pdf');
         }
+    }
+
+    public function administrationExport(Request $request)
+    {
+        abort_if(! userCan('report.attendance'), 403);
+
+        $type = $request->type ?? 'pdf';
+
+        $start_date = $request->input('start_date') ?? Carbon::now()->startOfMonth()->toDateString();
+        $end_date = $request->input('end_date') ?? Carbon::now()->endOfMonth()->toDateString();
+
+        try {
+            $start_date = Carbon::parse($start_date)->toDateString();
+            $end_date = Carbon::parse($end_date)->toDateString();
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Invalid date format'], 400);
+        }
+
+        // Build range dates (skip weekends)
+        $dates = collect(Carbon::parse($start_date)->daysUntil($end_date))
+            ->filter(function ($date) {
+                $dayName = Carbon::parse($date)->format('l');
+                return !in_array($dayName, ['Saturday', 'Sunday']);
+            })
+            ->map(fn($date) => $date->toDateString())
+            ->values();
+
+        $admins = User::active()->administration()->get();
+
+        $attendances = Attendance::whereBetween('date', [$start_date, $end_date])
+            ->get()
+            ->groupBy('user_id');
+
+        $administrationsAttendance = $admins->map(function ($admin) use ($dates, $attendances) {
+            $userAttendances = $attendances->get($admin->id, collect());
+            $leaveDates = collect();
+            foreach ($admin->leaves as $leave) {
+                $leavePeriod = collect(Carbon::parse($leave->start)->daysUntil($leave->end))->map(fn($date) => $date->toDateString());
+                $leaveDates = $leaveDates->merge($leavePeriod);
+            }
+
+            $attendanceStatus = $dates->mapWithKeys(function ($date) use ($userAttendances, $leaveDates) {
+                if ($leaveDates->contains($date)) {
+                    return [$date => 'I'];
+                }
+                $attendance = $userAttendances->firstWhere('date', $date);
+                return [$date => $attendance ? 'H' : 'A'];
+            });
+
+            $totalHadir = $attendanceStatus->filter(fn($status) => $status === 'H')->count();
+            $totalAlfa = $attendanceStatus->filter(fn($status) => $status === 'A')->count();
+            $totalIjin = $attendanceStatus->filter(fn($status) => $status === 'I')->count();
+
+            return [
+                'id' => $admin->id,
+                'user_name' => $admin->name,
+                'department' => $admin->department->name ?? '-',
+                'attendance' => $attendanceStatus,
+                'summary' => [
+                    'hadir' => $totalHadir,
+                    'ijin' => $totalIjin,
+                    'alfa' => $totalAlfa,
+                    'sakit' => 0,
+                ],
+            ];
+        });
+
+        if ($type === 'xlsx') {
+            return Excel::download(new AdministrationAttendanceExport($start_date, $end_date, $request->keyword, $request->department), 'administration_attendance_' . $start_date . '_' . $end_date . '.xlsx');
+        }
+
+        // Default to xlsx if not provided
+        return Excel::download(new AdministrationAttendanceExport($start_date, $end_date, $request->keyword, $request->department), 'administration_attendance_' . $start_date . '_' . $end_date . '.xlsx');
     }
 
     public function studentFees(Request $request)
